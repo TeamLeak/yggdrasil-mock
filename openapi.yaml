@@ -1,0 +1,123 @@
+openapi: 3.0.0
+info:
+  title: Yggdrasil Mock Server API
+  description: Mock implementation of Yggdrasil API for Minecraft authentication and session management.
+  version: 1.0.0
+servers:
+  - url: http://localhost:8080
+paths:
+  /:
+    get:
+      summary: Root endpoint
+      description: Check if the server is running.
+      responses:
+        '200':
+          description: Server is running
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+  /status:
+    get:
+      summary: Server status
+      description: Get server statistics.
+      responses:
+        '200':
+          description: Server statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user.count:
+                    type: integer
+                  token.count:
+                    type: integer
+                  pendingAuthentication.count:
+                    type: integer
+  /authserver/authenticate:
+    post:
+      summary: Authenticate a user
+      description: Authenticate a user and return an access token.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+                clientToken:
+                  type: string
+                requestUser:
+                  type: boolean
+              required:
+                - username
+                - password
+      responses:
+        '200':
+          description: Authentication successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken:
+                    type: string
+                  clientToken:
+                    type: string
+        '403':
+          description: Invalid credentials
+  /authserver/refresh:
+    post:
+      summary: Refresh token
+      description: Refresh an existing access token.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                accessToken:
+                  type: string
+                clientToken:
+                  type: string
+      responses:
+        '200':
+          description: Token refreshed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken:
+                    type: string
+                  clientToken:
+                    type: string
+        '403':
+          description: Invalid token
+  /textures/{hash}:
+    get:
+      summary: Get texture by hash
+      description: Retrieve a texture using its hash.
+      parameters:
+        - name: hash
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Texture found
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Texture not found

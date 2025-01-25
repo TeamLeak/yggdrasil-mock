@@ -3,6 +3,7 @@ package services
 import (
 	"database/sql"
 	"net/http"
+	"yggdrasil/database"
 
 	"github.com/gin-gonic/gin"
 )
@@ -14,26 +15,10 @@ func QueryProfilesHandler(c *gin.Context, db *sql.DB) {
 		return
 	}
 
-	var profiles []map[string]string
-	for _, name := range names {
-		var character struct {
-			ID     int    `json:"id"`
-			UUID   string `json:"uuid"`
-			Name   string `json:"name"`
-			Model  string `json:"model"`
-			UserID int    `json:"user_id"`
-		}
-
-		err := db.QueryRow(
-			`SELECT id, uuid, name, model, user_id FROM characters WHERE name = ?`,
-			name,
-		).Scan(&character.ID, &character.UUID, &character.Name, &character.Model, &character.UserID)
-		if err == nil {
-			profiles = append(profiles, map[string]string{
-				"id":   character.UUID,
-				"name": character.Name,
-			})
-		}
+	profiles, err := database.GetCharactersByNames(db, names)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve profiles"})
+		return
 	}
 
 	c.JSON(http.StatusOK, profiles)

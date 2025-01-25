@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"net/http"
 	"time"
+	"yggdrasil/database"
+	"yggdrasil/models"
 	"yggdrasil/utils"
 
 	"github.com/gin-gonic/gin"
@@ -19,14 +21,13 @@ func SignoutHandler(c *gin.Context, db *sql.DB) {
 		return
 	}
 
-	user, err := GetUserByEmailOrCharacter(db, req.Username)
+	user, err := database.GetUserByEmailOrCharacter(db, req.Username)
 	if err != nil || user.Password != req.Password {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Invalid credentials"})
 		return
 	}
 
-	err = RevokeAllTokens(db, user.ID)
-	if err != nil {
+	if err = database.RevokeAllTokens(db, user.ID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to revoke tokens"})
 		return
 	}
@@ -43,8 +44,7 @@ func InvalidateHandler(c *gin.Context, db *sql.DB) {
 		return
 	}
 
-	err := DeleteToken(db, req.AccessToken)
-	if err != nil {
+	if err := database.DeleteToken(db, req.AccessToken); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to invalidate token"})
 		return
 	}
@@ -61,7 +61,7 @@ func ValidateHandler(c *gin.Context, db *sql.DB) {
 		return
 	}
 
-	_, err := GetToken(db, req.AccessToken)
+	_, err := database.GetToken(db, req.AccessToken)
 	if err != nil {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Invalid token"})
 		return
@@ -80,13 +80,13 @@ func RefreshHandler(c *gin.Context, db *sql.DB) {
 		return
 	}
 
-	oldToken, err := GetToken(db, req.AccessToken)
+	oldToken, err := database.GetToken(db, req.AccessToken)
 	if err != nil {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Invalid token"})
 		return
 	}
 
-	newToken := Token{
+	newToken := models.Token{
 		AccessToken: utils.GenerateUUID(),
 		ClientToken: req.ClientToken,
 		CreatedAt:   time.Now(),
@@ -94,8 +94,7 @@ func RefreshHandler(c *gin.Context, db *sql.DB) {
 		CharacterID: oldToken.CharacterID,
 	}
 
-	err = InsertToken(db, &newToken)
-	if err != nil {
+	if err = database.InsertToken(db, &newToken); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to refresh token"})
 		return
 	}
@@ -118,31 +117,66 @@ func AuthenticateHandler(c *gin.Context, db *sql.DB) {
 		return
 	}
 
-	user, err := GetUserByEmailOrCharacter(db, req.Username)
-	if err != nil || user.Password != req.Password {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Invalid credentials"})
-		return
+	var user *models.User
+	var character *models.Character
+
+	loginWithCharacterName := true // Конфигурация
+	if loginWithCharacterName {
+		character, _ = database.FindCharacterByName(db, req.Username)
+	}
+	if character == nil {
+		var err error
+		user, err = database.GetUserByEmailOrCharacter(db, req.Username)
+		if err != nil || user.Password != req.Password {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Invalid credentials"})
+			return
+		}
+	} else {
+		user, _ = database.GetUserByID(db, character.UserID)
+		if user.Password != req.Password {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Invalid credentials"})
+			return
+		}
 	}
 
 	if req.ClientToken == "" {
 		req.ClientToken = utils.GenerateUUID()
 	}
 
-	token := Token{
+	token := models.Token{
 		AccessToken: utils.GenerateUUID(),
 		ClientToken: req.ClientToken,
 		CreatedAt:   time.Now(),
 		UserID:      user.ID,
 	}
+	if character != nil {
+		token.CharacterID = character.ID
+	}
 
-	err = InsertToken(db, &token)
-	if err != nil {
+	if err := database.InsertToken(db, &token); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to create token"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"accessToken": token.AccessToken,
-		"clientToken": token.ClientToken,
-	})
+	response := gin.H{
+		"accessToken":       token.AccessToken,
+		"clientToken":       token.ClientToken,
+		"availableProfiles": database.GetUserCharacters(db, user.ID),
+	}
+
+	if character != nil {
+		response["selectedProfile"] = map[string]string{
+			"id":   character.UUID,
+			"name": character.Name,
+		}
+	}
+
+	if req.RequestUser {
+		response["user"] = map[string]interface{}{
+			"id":    user.ID,
+			"email": user.Email,
+		}
+	}
+
+	c.JSON(http.StatusOK, response)
 }

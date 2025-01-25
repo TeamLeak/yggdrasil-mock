@@ -4,7 +4,8 @@ import (
 	"database/sql"
 	"io"
 	"net/http"
-	"time"
+	_ "time"
+	"yggdrasil/database"
 
 	"github.com/gin-gonic/gin"
 )
@@ -26,14 +27,7 @@ func UploadTextureHandler(c *gin.Context, db *sql.DB) {
 		return
 	}
 
-	hash := uuid + "-" + textureType
-
-	_, err = db.Exec(
-		`INSERT INTO textures (hash, data, uploaded_at) VALUES (?, ?, ?)
-		ON CONFLICT(hash) DO UPDATE SET data = excluded.data, uploaded_at = excluded.uploaded_at`,
-		hash, data, time.Now(),
-	)
-	if err != nil {
+	if err := database.InsertOrUpdateTexture(db, uuid, textureType, data); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to upload texture"})
 		return
 	}
@@ -45,10 +39,7 @@ func DeleteTextureHandler(c *gin.Context, db *sql.DB) {
 	uuid := c.Param("uuid")
 	textureType := c.Param("textureType")
 
-	hash := uuid + "-" + textureType
-
-	_, err := db.Exec(`DELETE FROM textures WHERE hash = ?`, hash)
-	if err != nil {
+	if err := database.DeleteTexture(db, uuid, textureType); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete texture"})
 		return
 	}
@@ -59,16 +50,7 @@ func DeleteTextureHandler(c *gin.Context, db *sql.DB) {
 func TextureHandler(c *gin.Context, db *sql.DB) {
 	hash := c.Param("hash")
 
-	var texture struct {
-		Hash       string `json:"hash"`
-		Data       []byte `json:"data"`
-		UploadedAt string `json:"uploaded_at"`
-	}
-
-	err := db.QueryRow(
-		`SELECT hash, data, uploaded_at FROM textures WHERE hash = ?`,
-		hash,
-	).Scan(&texture.Hash, &texture.Data, &texture.UploadedAt)
+	texture, err := database.GetTextureByHash(db, hash)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Texture not found"})
 		return

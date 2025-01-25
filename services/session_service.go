@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"net/http"
 	"strconv"
+	"yggdrasil/database"
 
 	"github.com/gin-gonic/gin"
 )
@@ -19,7 +20,7 @@ func JoinServerHandler(c *gin.Context, db *sql.DB) {
 		return
 	}
 
-	token, err := GetToken(db, req.AccessToken)
+	token, err := database.GetToken(db, req.AccessToken)
 	if err != nil || token == nil {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Invalid token"})
 		return
@@ -41,21 +42,7 @@ func HasJoinedHandler(c *gin.Context, db *sql.DB) {
 		return
 	}
 
-	var character struct {
-		ID     int    `json:"id"`
-		UUID   string `json:"uuid"`
-		Name   string `json:"name"`
-		Model  string `json:"model"`
-		UserID int    `json:"user_id"`
-	}
-
-	err := db.QueryRow(
-		`SELECT c.id, c.uuid, c.name, c.model, c.user_id
-		 FROM characters c
-		 JOIN tokens t ON c.id = t.character_id
-		 WHERE c.name = ? AND t.client_token = ?`,
-		username, serverID,
-	).Scan(&character.ID, &character.UUID, &character.Name, &character.Model, &character.UserID)
+	character, err := database.FindCharacterByServerAndName(db, username, serverID)
 	if err != nil {
 		c.Status(http.StatusNoContent)
 		return

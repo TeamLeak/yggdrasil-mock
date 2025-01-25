@@ -177,3 +177,51 @@ func GetTextureByHash(db *sql.DB, hash string) (*struct {
 	}
 	return &texture, nil
 }
+
+func GetAllUsers(db *sql.DB) ([]models.User, error) {
+	rows, err := db.Query(`SELECT id, email, password FROM users`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []models.User
+	for rows.Next() {
+		var user models.User
+		if err := rows.Scan(&user.ID, &user.Email, &user.Password); err != nil {
+			return nil, err
+		}
+		users = append(users, user)
+	}
+	return users, nil
+}
+
+func InsertUser(db *sql.DB, user *models.User) error {
+	_, err := db.Exec(`INSERT INTO users (email, password) VALUES (?, ?)`, user.Email, user.Password)
+	return err
+}
+
+func UpdateUser(db *sql.DB, id string, user *models.User) error {
+	_, err := db.Exec(`UPDATE users SET email = ?, password = ? WHERE id = ?`, user.Email, user.Password, id)
+	return err
+}
+
+func DeleteUser(db *sql.DB, id string) error {
+	_, err := db.Exec(`DELETE FROM users WHERE id = ?`, id)
+	return err
+}
+
+// SetCharacterTexture - Set a texture for a character
+func SetCharacterTexture(db *sql.DB, uuid, textureHash string) error {
+	_, err := db.Exec(`UPDATE characters SET texture_hash = ? WHERE uuid = ?`, textureHash, uuid)
+	return err
+}
+
+// InsertCharacter - Add a new character to the database
+func InsertCharacter(db *sql.DB, character *models.Character) error {
+	_, err := db.Exec(
+		`INSERT INTO characters (uuid, name, model, user_id) VALUES (?, ?, ?, ?)`,
+		character.UUID, character.Name, character.Model, character.UserID,
+	)
+	return err
+}

@@ -120,29 +120,31 @@ func AuthenticateHandler(c *gin.Context, db *sql.DB) {
 	var user *models.User
 	var character *models.Character
 
-	loginWithCharacterName := true // Конфигурация
-	if loginWithCharacterName {
-		character, _ = database.FindCharacterByName(db, req.Username)
-	}
+	// Найти персонажа по имени
+	character, _ = database.FindCharacterByName(db, req.Username)
 	if character == nil {
+		// Найти пользователя по email или имени персонажа
 		var err error
 		user, err = database.GetUserByEmailOrCharacter(db, req.Username)
-		if err != nil || user.Password != req.Password {
+		if err != nil || !utils.CompareHashAndPassword(user.Password, req.Password) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "Invalid credentials"})
 			return
 		}
 	} else {
+		// Найти владельца персонажа
 		user, _ = database.GetUserByID(db, character.UserID)
-		if user.Password != req.Password {
+		if !utils.CompareHashAndPassword(user.Password, req.Password) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "Invalid credentials"})
 			return
 		}
 	}
 
+	// Сгенерировать clientToken, если он не предоставлен
 	if req.ClientToken == "" {
 		req.ClientToken = utils.GenerateUUID()
 	}
 
+	// Создать токен
 	token := models.Token{
 		AccessToken: utils.GenerateUUID(),
 		ClientToken: req.ClientToken,
@@ -153,17 +155,20 @@ func AuthenticateHandler(c *gin.Context, db *sql.DB) {
 		token.CharacterID = character.ID
 	}
 
+	// Сохранить токен в базе данных
 	if err := database.InsertToken(db, &token); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to create token"})
 		return
 	}
 
+	// Подготовить ответ
 	response := gin.H{
 		"accessToken":       token.AccessToken,
 		"clientToken":       token.ClientToken,
 		"availableProfiles": database.GetUserCharacters(db, user.ID),
 	}
 
+	// Добавить выбранный профиль, если он существует
 	if character != nil {
 		response["selectedProfile"] = map[string]string{
 			"id":   character.UUID,
@@ -171,6 +176,7 @@ func AuthenticateHandler(c *gin.Context, db *sql.DB) {
 		}
 	}
 
+	// Добавить информацию о пользователе, если она запрошена
 	if req.RequestUser {
 		response["user"] = map[string]interface{}{
 			"id":    user.ID,

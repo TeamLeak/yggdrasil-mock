@@ -18,4 +18,6 @@ func RegisterRoutes(r *gin.Engine, db *sql.DB) {
 	RegisterSessionRoutes(r, db)
 	RegisterProfileRoutes(r, db)
 	RegisterTextureRoutes(r, db)
+	RegisterUserRoutes(r, db)
+	RegisterAPIRoutes(r, db)
 }
